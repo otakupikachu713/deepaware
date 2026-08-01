@@ -1,0 +1,45 @@
+{
+  "source_dataset": "lerobot/aloha_static_coffee",
+  "input": {
+    "episodes": 50,
+    "frames": 55000
+  },
+  "step1_drop_outlier_episodes": {
+    "dropped_episodes": [
+      8
+    ],
+    "justification": "episode contains a joint-state value |z|>6 vs. that joint's own global distribution (real finding from Task 1, episode 8, 56 frames) - physically implausible values are almost never recoverable per-frame, drop the whole recording session"
+  },
+  "step2_smoothing": {
+    "method": "Savitzky-Golay",
+    "window": 9,
+    "polyorder": 2,
+    "justification": "reduces high-frequency encoder/logging jitter in state/action without distorting the low-frequency task trajectory shape (polyorder=2 preserves smooth accel/decel)"
+  },
+  "desync_review_queue_not_auto_dropped": [
+    1,
+    2,
+    4,
+    8,
+    9,
+    12,
+    23,
+    26,
+    27,
+    30,
+    31,
+    36,
+    40
+  ],
+  "egocentric_extension": {
+    "method": "per-frame validity mask (blurred OR overexposed) from egocentric_audit.py, joined on (episode_index, frame_index) rather than deleting video frames, so alignment with the (filtered, smoothed) teleop table is never broken",
+    "frames_after_teleop_filtering": 53900,
+    "frames_also_video_valid": 15501,
+    "video_valid_fraction": 0.28758812615955476
+  },
+  "output": {
+    "episodes": 49,
+    "frames": 53900,
+    "frames_usable_by_both_modalities": 15501
+  }
+}

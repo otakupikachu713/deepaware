@@ -1,0 +1,48 @@
+{
+  "video": "lerobot/aloha_static_coffee observation.images.cam_left_wrist",
+  "n_frames_decoded": 55000,
+  "n_episodes": 50,
+  "blur": {
+    "detector": "Laplacian variance, threshold = 15th percentile of this stream",
+    "threshold": 23.716812102728422,
+    "frac_frames_below_threshold": 0.15,
+    "mean": 58.38639517401499,
+    "std": 41.004268468362056
+  },
+  "blur_vs_wrist_motion_correlation": 0.052886507411158634,
+  "exposure": {
+    "overexposed_frame_frac (>5% bright px)": 0.661290909090909,
+    "underexposed_frame_frac (>50% dark px)": 0.0,
+    "mean_brightness": 109.03823330681819
+  },
+  "occlusion_proxy": {
+    "method": "fraction of dark pixels in bottom third of frame vs. real left-gripper state channel",
+    "correlation_with_neg_gripper_state": -0.33862087630262555,
+    "note": "heuristic, not verified against pixel-level occlusion labels; reported correlation is the actual evidence for/against it, not asserted."
+  },
+  "episodes_flagged_for_review (>15% blurred frames)": {
+    "episodes": [
+      0,
+      3,
+      4,
+      6,
+      7,
+      8,
+      16,
+      17,
+      18,
+      20,
+      21,
+      34,
+      38,
+      39,
+      40,
+      45,
+      46,
+      47,
+      48,
+      49
+    ],
+    "count": 20
+  }
+}
