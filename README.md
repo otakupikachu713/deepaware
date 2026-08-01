@@ -1,110 +1,13 @@
 # OpenArm 2.0 — Egocentric Data & Teleoperation Pipeline
 
-Take-home submission for DeepAware AI / Robotics Center of Silicon Valley.
-
-## What's completed
-
-| Task | Status | Deliverable |
-|---|---|---|
-| 1. Dataset Exploration & Quality Audit | **Done, code + real data** | [§Task 1](#task-1--dataset-exploration--quality-audit) below, full detail in [`openarm_dataset_quality_audit.md`](openarm_dataset_quality_audit.md); code: `dataset_audit.py`, `egocentric_audit.py`, `plot_audit_results.py` |
-| 2. Data Labeling Design | Done, write-up | [§Task 2](#task-2--data-labeling-design) below |
-| 3. Data Curation Pipeline | **Done, code + real data** | [§Task 3](#task-3--data-curation-pipeline) below; code: `curation_pipeline.py`, `curation_report.json` |
-| 4. Policy Evaluation Design | Done, write-up | [§Task 4](#task-4--policy-evaluation-design) below |
-| 5. Model Adaptation (bonus) — VLA | Done, write-up | [§Task 5](#task-5--model-adaptation-bonus--vla) below |
-
-Tasks 1 and 3 have runnable code against **real, downloaded Hugging Face datasets** — no synthetic
-or fabricated numbers anywhere in this submission. Tasks 2, 4, and 5 are reasoning/design tasks as
-scoped in the prompt ("what tool would you use," "how would you diagnose," "how would you
-fine-tune") and are answered as write-ups, consistent with how the prompt frames them.
-
-## Datasets used
-
-- `lerobot/aloha_sim_insertion_human` — the dataset named in the prompt; simulation, single
-  top-down camera, no wrist camera.
-- `lerobot/aloha_static_coffee` — real ALOHA teleoperated hardware data, chosen because it has
-  `cam_left_wrist`/`cam_right_wrist`, which the sim dataset lacks and Part 2 of Task 1 requires.
-
-## How to run
-
-```
-# environment: conda env "lerobot" (lerobot, datasets, av, opencv, pandas, huggingface_hub, scipy)
-python dataset_audit.py        # Task 1 teleop profiling -> audit_results_teleop.json
-python egocentric_audit.py     # Task 1 egocentric profiling -> audit_results_egocentric.json, egocentric_frame_metrics.npz
-python plot_audit_results.py   # -> audit_plots.png
-python curation_pipeline.py    # Task 3 -> curated_teleop_arrays.npz, curation_report.json
-```
-
-Each script downloads its data from the Hugging Face Hub on first run (cached afterward). No
-hardware access is needed, matching the take-home's constraints.
-
----
-
-## Architecture & design decisions
-
-- **Real data throughout, even where it made the results messier or contradicted my own initial
-  assumptions.** The audit write-up (§Part 1/2) explicitly documents two places where testing
-  against real data overturned an assumption I'd have otherwise stated as fact: episode lengths
-  turned out to be fixed rather than variable in both datasets, and a joint-velocity proxy for
-  camera motion turned out to have essentially no correlation with measured blur (r≈0.05, not the
-  strong negative correlation I expected). I kept both corrections in the write-up rather than
-  quietly fixing the numbers, because that's the actual audit finding.
-- **`torchcodec`/FFmpeg didn't work on this Windows box** (missing native DLLs for every FFmpeg
-  version torchcodec tried). Rather than skip the egocentric analysis, I decoded the wrist-camera
-  mp4 directly with OpenCV's `VideoCapture`, which bundles its own working FFmpeg build. This is
-  called out in the audit write-up so it's clear why the code path differs from lerobot's default.
-- **Detectors are validated against their own flag rate before being trusted**, not just built and
-  reported. Three of the four teleop detectors in `dataset_audit.py` needed this: the naive
-  frozen-sensor check flagged 100% of episodes on real hardware data (useless — it was catching
-  legitimate holds, not faults) until tightened to require all 14 channels to freeze
-  *simultaneously*, which found the real fault signature (zero events, correctly). The desync
-  detector flagged 100% of episodes on the sim dataset (a recording-convention artifact) vs. a
-  plausible 26% on real hardware data. This distinction — "does my detector's flag rate make
-  sense, or is it just measuring dataset-format quirks" — is the main quality-control idea running
-  through the audit.
-- **The curation pipeline (`curation_pipeline.py`) uses the exact detectors validated in Task 1**,
-  not a separate ad hoc set — episode-level outlier drop and Savitzky-Golay smoothing for
-  teleop, and a real per-frame blur/exposure validity mask for the wrist camera, joined on
-  `(episode_index, frame_index)` rather than physically deleting video frames, to keep the two
-  modalities aligned without duplicating decoded video on disk.
-
-## Key trade-off: teleop vs. egocentric data
-
-The single biggest asymmetry found across every task here: **joint-state defects are rare and
-cheap to detect; egocentric defects are common and expensive to detect.** Concretely, on the real
-`aloha_static_coffee` data: 0 real sensor-freeze events, 56 outlier frames in 1/50 episodes, and
-13/50 episodes with a real action/state desync signal — all found from pure statistics on a
-14-dim vector. On the wrist camera, over the same 50 episodes: 66% of frames are meaningfully
-overexposed and 15% are meaningfully blurred, found only after decoding and scoring all 55,000
-frames with per-frame image metrics. That asymmetry should drive pipeline order (cheap joint-state
-filters as a gate before expensive video processing), filtering granularity (frame-level for
-joint-state, episode-level or masked for video, since deleting most of an episode's frames
-fragments it for a video-conditioned policy), and where engineering effort goes first (an
-exposure/lighting fix on the wrist camera setup would eliminate more bad data here than any
-software-side blur filter).
-
-## What I'd do next given more time or hardware access
-
-- Attribute the wrist-camera blur causally with real optical flow or true forward-kinematics
-  camera pose, since the joint-velocity proxy in this submission was shown *not* to explain it —
-  that's an open question this audit surfaced but didn't answer.
-- Get the second wrist camera (`cam_right_wrist`) and `cam_high`/`cam_low` third-person views into
-  the same audit to see whether the 66% overexposure rate is specific to `cam_left_wrist`'s
-  mounting/lighting geometry or is a dataset-wide issue.
-- Run the curation pipeline's output through an actual ACT/Diffusion Policy training loop and
-  check whether the curated subset changes eval success rate, rather than stopping at "this subset
-  looks cleaner by these metrics" — the real test of a curation pipeline is downstream policy
-  performance, not audit-metric improvement.
-- Fix the `torchcodec`/FFmpeg install on this machine so the pipeline can go through lerobot's
-  standard video path instead of a workaround.
-
----
-
 ## Task 1 — Dataset Exploration & Quality Audit
 
 Full write-up with every number and the reasoning behind it:
 [openarm_dataset_quality_audit.md](openarm_dataset_quality_audit.md). Code: `dataset_audit.py`
-(teleop), `egocentric_audit.py` (wrist camera), `plot_audit_results.py` (→ `audit_plots.png`).
-Everything below is real script output against the two datasets listed above — nothing estimated.
+(teleop), `egocentric_audit.py` (wrist camera), `plot_audit_results.py` (→ `audit_plots.png`). Real
+data from `lerobot/aloha_sim_insertion_human` (the dataset named in the prompt) and
+`lerobot/aloha_static_coffee` (real ALOHA hardware, has the wrist cameras the sim dataset lacks).
+Everything below is real script output against those two datasets — nothing estimated.
 
 ### Teleoperation
 
@@ -311,9 +214,6 @@ slipped mid-transport. Concretely, this changes evaluation in two ways:
 ---
 
 ## Task 5 — Model Adaptation (Bonus) — VLA
-
-(Picking VLA per the prompt's "pick whichever you're more familiar with" — no wrong choice per the
-prompt, but VLA is the one I can reason about more concretely end-to-end.)
 
 ### Teleoperation
 
